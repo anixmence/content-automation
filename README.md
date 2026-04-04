@@ -35,7 +35,7 @@ content-automation/
 ### 2) 執行指令
 
 ```bash
-python main.py "AI 內容生成"
+python3 main.py "AI 內容生成"
 ```
 
 ### 3) 查看輸出
