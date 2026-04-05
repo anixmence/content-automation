@@ -1,49 +1,124 @@
 from __future__ import annotations
 
+import json
+import os
+from urllib import error, request
+
 from app.models import GenerationRequest
 
-
-def generate_moments_copies(request: GenerationRequest, moments_count: int, tone: str) -> list[str]:
-    templates = [
-        "{topic} 不是一時的熱度，而是值得長期投入的方向。今天先行動一小步。",
-        "如果你也在關注 {topic}，歡迎一起交流，我先把這週的心得整理好了。",
-        "做 {topic} 最大的收穫：看見自己每天都在變得更穩、更清晰。",
-        "把複雜的 {topic} 變簡單，才是能真正落地的開始。",
-        "關於 {topic}，我整理了 3 個可直接上手的方法，留言我發你。",
-        "最近在深挖 {topic}，越研究越確定：先開始，比完美更重要。",
-        "{topic} 這件事，我用一個小流程把效率提升了不少，之後分享細節。",
-        "很多人問我 {topic} 怎麼入門：先選一個場景，今天就做第一版。",
-    ]
-
-    copies = []
-    for i in range(moments_count):
-        text = templates[i % len(templates)].format(topic=request.topic)
-        copies.append(f"[{tone}] {text}")
-
-    return copies
+OPENAI_API_URL = "https://api.openai.com/v1/responses"
+DEFAULT_MODEL = "gpt-4.1-mini"
 
 
-def generate_article(request: GenerationRequest, sections: list[str], tone: str) -> tuple[str, str]:
-    title = f"從 0 到 1 做好「{request.topic}」：一套可落地的方法"
+class OpenAIConfigError(Exception):
+    """Raised when OpenAI related settings are invalid."""
 
-    intro = (
-        f"在討論 {request.topic} 時，很多人會先追求完整方案，但真正有效的方式通常是先跑出最小閉環。"
-        f"這篇文章會用 {tone} 的方式，帶你快速建立可執行的路線。"
-    )
 
-    paragraphs = [intro]
-    for idx, section in enumerate(sections, start=1):
-        paragraphs.append(
-            f"## {idx}. {section}\n"
-            f"以「{request.topic}」為核心，先設定一個可在 1 週內完成的小目標，"
-            "並把輸入、執行、輸出三步固定下來。重點不是一次到位，而是可重複與可優化。"
+class OpenAIGenerationError(Exception):
+    """Raised when OpenAI generation fails."""
+
+
+def _extract_output_text(response_json: dict) -> str:
+    output = response_json.get("output", [])
+    for item in output:
+        for content in item.get("content", []):
+            text = content.get("text")
+            if text:
+                return text
+
+    output_text = response_json.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text
+
+    raise OpenAIGenerationError("OpenAI API 回傳內容為空，請稍後重試。")
+
+
+def generate_content_with_openai(
+    request_data: GenerationRequest,
+    moments_count: int,
+    tone: str,
+    sections: list[str],
+) -> tuple[list[str], str, str]:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise OpenAIConfigError(
+            "缺少 OPENAI_API_KEY。請先設定環境變數，例如：\n"
+            "export OPENAI_API_KEY='your_api_key'"
         )
 
-    closing = (
-        f"最後，請記住：{request.topic} 的關鍵不是知道更多，而是每週持續產出可驗證成果。"
-        "當你有了第一個可運作版本，後面的優化自然會變得簡單。"
-    )
-    paragraphs.append(closing)
+    prompt = f"""
+你是中文內容行銷編輯，請依照以下條件產出內容，並且只輸出 JSON。
 
-    body = "\n\n".join(paragraphs)
-    return title, body
+主題：{request_data.topic}
+語氣：{tone}
+朋友圈文案條數：{moments_count}
+公眾號文章段落方向：{", ".join(sections)}
+
+請輸出以下 JSON 結構：
+{{
+  "moments": ["文案1", "文案2", "...共 {moments_count} 條"],
+  "article_title": "文章標題",
+  "article_body": "完整文章內容（使用 Markdown，包含導言、至少 {len(sections)} 個對應段落、小結）"
+}}
+
+要求：
+1) 每條朋友圈文案都要完整可直接發佈。
+2) 文章要完整、可閱讀、非提綱。
+3) 不要輸出 JSON 以外內容。
+""".strip()
+
+    payload = {
+        "model": DEFAULT_MODEL,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    }
+                ],
+            }
+        ],
+    }
+
+    req = request.Request(
+        OPENAI_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=60) as resp:
+            body = resp.read().decode("utf-8")
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise OpenAIGenerationError(f"OpenAI API 請求失敗（HTTP {exc.code}）：{detail}") from exc
+    except error.URLError as exc:
+        raise OpenAIGenerationError(f"無法連線至 OpenAI API：{exc.reason}") from exc
+
+    try:
+        response_json = json.loads(body)
+        output_text = _extract_output_text(response_json)
+        parsed = json.loads(output_text)
+    except json.JSONDecodeError as exc:
+        raise OpenAIGenerationError(f"OpenAI 回傳內容解析失敗：{exc}") from exc
+
+    moments = parsed.get("moments")
+    article_title = parsed.get("article_title")
+    article_body = parsed.get("article_body")
+
+    if not isinstance(moments, list) or len(moments) != moments_count or not all(isinstance(i, str) for i in moments):
+        raise OpenAIGenerationError("OpenAI 回傳的 moments 欄位格式錯誤。")
+
+    if not isinstance(article_title, str) or not article_title.strip():
+        raise OpenAIGenerationError("OpenAI 回傳的 article_title 欄位格式錯誤。")
+
+    if not isinstance(article_body, str) or not article_body.strip():
+        raise OpenAIGenerationError("OpenAI 回傳的 article_body 欄位格式錯誤。")
+
+    return moments, article_title, article_body
