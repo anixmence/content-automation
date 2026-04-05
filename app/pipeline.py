@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.config import OUTPUT_DIR, load_settings
-from app.generators import generate_article, generate_moments_copies
+from app.generators import generate_content_with_openai
 from app.models import GenerationRequest, GenerationResult
 
 
@@ -11,15 +11,11 @@ def run_generation(topic: str) -> GenerationResult:
     settings = load_settings()
     request = GenerationRequest(topic=topic)
 
-    moments = generate_moments_copies(
-        request=request,
+    moments, title, body = generate_content_with_openai(
+        request_data=request,
         moments_count=int(settings["moments_count"]),
         tone=str(settings["default_tone"]),
-    )
-    title, body = generate_article(
-        request=request,
         sections=list(settings["article_sections"]),
-        tone=str(settings["default_tone"]),
     )
 
     return GenerationResult(

@@ -1,6 +1,6 @@
 # content-automation
 
-最小可行版本（MVP）：輸入一個主題，輸出 5 條朋友圈文案與 1 篇公眾號文章。
+最小可行版本（MVP）：輸入一個主題，透過 OpenAI API 輸出 5 條朋友圈文案與 1 篇公眾號文章。
 
 ## 專案結構
 
@@ -22,23 +22,32 @@ content-automation/
 ## 功能
 
 - 輸入：一個主題（CLI 參數）
+- 透過 OpenAI API 生成內容
 - 輸出：
-  - `output/moments.txt`（5 條朋友圈文案）
-  - `output/article.md`（1 篇公眾號文章）
+  - `output/moments.txt`（5 條完整可用的朋友圈文案）
+  - `output/article.md`（1 篇完整公眾號文章）
 
-## 如何在本機執行
+## 安裝與執行
 
 ### 1) 環境需求
 
 - Python 3.10+
 
-### 2) 執行指令
+### 2) 設定 OpenAI API key
+
+```bash
+export OPENAI_API_KEY="你的 OpenAI API Key"
+```
+
+> 若未設定 `OPENAI_API_KEY`，程式會直接報錯並提示設定方式。
+
+### 3) 執行指令
 
 ```bash
 python3 main.py "AI 內容生成"
 ```
 
-### 3) 查看輸出
+### 4) 查看輸出
 
 ```bash
 cat output/moments.txt

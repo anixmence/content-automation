@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
+from app.generators import OpenAIConfigError, OpenAIGenerationError
 from app.pipeline import run_generation, save_outputs
 
 
@@ -13,7 +15,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    result = run_generation(args.topic)
+
+    try:
+        result = run_generation(args.topic)
+    except OpenAIConfigError as exc:
+        print(f"設定錯誤：{exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    except OpenAIGenerationError as exc:
+        print(f"生成失敗：{exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
     moments_path, article_path = save_outputs(result)
 
     print("生成完成！")
