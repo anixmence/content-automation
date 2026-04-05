@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+output/article.md
+output/moments.txt

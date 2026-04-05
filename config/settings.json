@@ -1,0 +1,10 @@
+{
+  "moments_count": 5,
+  "default_tone": "專業但親切",
+  "model": "gpt-5-mini",
+  "article_sections": [
+    "先明確目標與受眾",
+    "設計最小可執行流程",
+    "建立每週迭代機制"
+  ]
+}
